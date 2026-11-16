@@ -1,0 +1,65 @@
+services:
+  postgres:
+    image: timescale/timescaledb:latest-pg16 
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-skyblock}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-skyblock}
+      POSTGRES_DB: skyblock
+    command: postgres -c shared_preload_libraries=timescaledb
+    ports: ["5432:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U skyblock"]
+      interval: 5s
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    command: ["redis-server", "--appendonly", "yes"] # Включаем сохранение данных на диск
+    volumes: ["redisdata:/data"]
+
+  migrate:
+    build: .
+    image: hupy:${APP_VERSION:-latest}
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      postgres: {condition: service_healthy}
+    restart: "no"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://skyblock:skyblock@postgres:5432/skyblock 
+      
+# ─── API ────────────────────────────────────────────────
+  app:
+    build: .
+    image: hupy:${APP_VERSION:-latest}
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+    depends_on:
+      postgres: {condition: service_healthy} 
+      redis:    {condition: service_started} 
+      migrate:  {condition: service_completed_successfully}
+    environment:
+      DATABASE_URL: postgresql+asyncpg://skyblock:skyblock@postgres:5432/skyblock
+      REDIS_URL: redis://redis:6379/0
+      HYPIXEL_API_KEY: ${HYPIXEL_API_KEY:-}
+    ports: ["8000:8000"] 
+    restart: unless-stopped
+# ─── WORKER (ровно 1 экземпляр!) ────────────────────────
+  worker:
+    build: .
+    image: hupy:${APP_VERSION:-latest}
+    command: ["python", "-m", "worker"]
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis:    {condition: service_started}
+      migrate:  {condition: service_completed_successfully}
+    environment:
+      DATABASE_URL: postgresql+asyncpg://skyblock:skyblock@postgres:5432/skyblock
+      REDIS_URL:    redis://redis:6379/0
+      HYPIXEL_API_KEY: ${HYPIXEL_API_KEY:-}
+    restart: unless-stopped
+    # ВАЖНО: никакого deploy.replicas > 1 и никакого --scale worker=2
+    stop_grace_period: 30s   
+
+volumes:
+  pgdata:  # Именованный том для данных PostgreSQL
+  redisdata: # Именованный том для данных Redis
