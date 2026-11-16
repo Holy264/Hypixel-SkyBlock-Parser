@@ -1,10 +1,17 @@
 # Hupy — Hypixel SkyBlock Parser
 
+[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.141-009688.svg)](https://fastapi.tiangolo.com/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791.svg)](https://www.postgresql.org/)
+[![Redis](https://img.shields.io/badge/Redis-7-DC382D.svg)](https://redis.io/)
+
 Сервис для парсинга и хранения цен **Hypixel SkyBlock**: Bazaar и Auction House.
 Собирает данные из [Hypixel API v2](https://api.hypixel.net/), агрегирует их
 и отдаёт через REST API с кэшированием в Redis.
 
-# Содержание
+---
+
+## Содержание
 
 - [Архитектура](#архитектура)
 - [Возможности](#возможности)
@@ -17,9 +24,15 @@
 - [Тестирование](#тестирование)
 - [Миграции](#миграции)
 - [Известные ограничения](#известные-ограничения)
+- [Лицензия](#лицензия)
+- [Благодарности](#благодарности)
 
-# Архитектура
-Проект разделён на два независимых процесса, которые общаются через PostgreSQL и Redis:
+---
+
+## Архитектура
+
+Проект разделён на **два независимых процесса**, которые общаются через
+PostgreSQL и Redis:
 
 ```text
 ┌─────────────┐       ┌─────────────┐
@@ -41,8 +54,11 @@
                       └─────────────┘
 ```
 
-- **`worker`** — отдельный процесс-сборщик. Запускается **в одном экземпляре**, крутит три джобы по расписанию и защищён `Redis Lock` от параллельных запусков на случай рестарта или повторного деплоя.
-- **`app`** — FastAPI, отдаёт REST API, работает за Uvicorn (2 воркера). К Hypixel **не** обращается, читает только из БД и кэша.
+- **`worker`** — отдельный процесс-сборщик. Запускается **в одном экземпляре**,
+  крутит три джобы по расписанию и защищён `Redis Lock` от параллельных
+  запусков на случай рестарта или повторного деплоя.
+- **`app`** — FastAPI, отдаёт REST API, работает за Uvicorn (2 воркера).
+  К Hypixel **не** обращается, читает только из БД и кэша.
 
 ---
 
@@ -53,7 +69,7 @@
 - Автоматическая категоризация: `main → sub → [sub-sub] → items`.
 - Автокомплит по `product_id` с ранжированием (точное → префикс → подстрока).
 - История цен по продукту.
-- Дерево категорий с кэшем.
+- Дерево категорий с кэшем на 1 час.
 
 ### Auction
 - Синхронизация `lowest BIN` (только BIN-лоты) с группировкой по `(item_name, tier)`.
@@ -65,7 +81,7 @@
 - Автокомплит по `item_name` + `tier`.
 
 ### Инфраструктура
-- Redis-кэш на всех read-эндпоинтах.
+- Redis-кэш на всех read-эндпоинтах (30–3600 сек).
 - Redis Lock для синхронизаций (безопасно при рестарте воркера).
 - Retry с экспоненциальным backoff для всех запросов к Hypixel.
 - Асинхронный стек: SQLAlchemy 2.x async + asyncpg + httpx.
@@ -87,25 +103,32 @@ cp .env.example .env
 
 docker compose up -d --build
 ```
+
 Сервис будет доступен:
-API: http://localhost:8000
-Swagger UI: http://localhost:8000/docs
-Health: http://localhost:8000/health
+
+- API: <http://localhost:8000>
+- Swagger UI: <http://localhost:8000/docs>
+- Health: <http://localhost:8000/health>
 
 Логи:
 
-bash
+```bash
 docker compose logs -f worker
 docker compose logs -f app
+```
+
 Остановка:
 
-bash
+```bash
 docker compose down            # без удаления volume'ов
 docker compose down -v         # с удалением БД и кэша
-Локальная разработка
+```
+
+### Локальная разработка
+
 Нужны: Python 3.12+, PostgreSQL 16, Redis 7.
 
-bash
+```bash
 # 1. Инфраструктура в Docker
 docker compose up -d postgres redis
 
@@ -122,47 +145,68 @@ uvicorn main:app --reload --port 8000
 
 # 5. Запуск воркера (в отдельном терминале)
 python -m worker
-Конфигурация
-Все настройки читаются из .env (см. .env.example).
+```
 
-Переменная	Обязательна	По умолчанию	Описание
-HYPIXEL_API_KEY	✅	—	API-ключ Hypixel (без него возможен 429)
-DATABASE_URL		postgresql+asyncpg://skyblock:skyblock@localhost:5432/skyblock	DSN PostgreSQL
-REDIS_URL		redis://localhost:6379/0	DSN Redis
-BAZAAR_FETCH_INTERVAL		300	Интервал синхронизации Bazaar, сек
-AUCTION_FETCH_INTERVAL		300	Интервал синхронизации Auction, сек
-SALES_FETCH_INTERVAL		120	Интервал синхронизации sales, сек
-POSTGRES_USER		skyblock	(только docker-compose)
-POSTGRES_PASSWORD		skyblock	(только docker-compose)
-APP_VERSION		latest	Тег образа для docker-compose
-⚠️ HYPIXEL_API_KEY Без него Hypixel отдаёт 429 после нескольких запросов в минуту, и синхронизация будет
-работать нестабильно.
+---
 
-API
-Базовый префикс: /
+## Конфигурация
 
-Bazaar
-Метод	             Путь                    Описание 
-GET	/bazaar/search?search=&limit=20	Автокомплит по продуктам
-GET	/bazaar/{product_id}/history?limit=100	История цен по продукту
-Пример:
+Все настройки читаются из `.env` (см. `.env.example`).
 
-bash
+| Переменная | Обязательна | По умолчанию | Описание |
+|---|---|---|---|
+| `HYPIXEL_API_KEY` | ✅ | — | API-ключ Hypixel (без него возможен 429) |
+| `DATABASE_URL` | | `postgresql+asyncpg://skyblock:skyblock@localhost:5432/skyblock` | DSN PostgreSQL |
+| `REDIS_URL` | | `redis://localhost:6379/0` | DSN Redis |
+| `BAZAAR_FETCH_INTERVAL` | | `300` | Интервал синхронизации Bazaar, сек |
+| `AUCTION_FETCH_INTERVAL` | | `300` | Интервал синхронизации Auction, сек |
+| `SALES_FETCH_INTERVAL` | | `120` | Интервал синхронизации sales, сек |
+| `POSTGRES_USER` | | `skyblock` | (только docker-compose) |
+| `POSTGRES_PASSWORD` | | `skyblock` | (только docker-compose) |
+| `APP_VERSION` | | `latest` | Тег образа для docker-compose |
+
+> ⚠️ **`HYPIXEL_API_KEY` обязателен для продакшена.** Без него Hypixel
+> отдаёт 429 после нескольких запросов в минуту, и синхронизация будет
+> работать нестабильно.
+
+---
+
+## API
+
+Базовый префикс: `/`
+
+### Bazaar
+
+| Метод | Путь | Описание |
+|---|---|---|
+| `GET` | `/bazaar/search?search=&limit=20` | Автокомплит по продуктам |
+| `GET` | `/bazaar/{product_id}/history?limit=100` | История цен по продукту |
+
+**Пример:**
+
+```bash
 curl "http://localhost:8000/bazaar/search?search=carrot&limit=5"
 curl "http://localhost:8000/bazaar/CARROT_ITEM/history?limit=10"
-Auction
-Метод	            Путь                     Описание
-GET	/auction/search?search=&limit=20	Автокомплит по предметам
-GET	/auction/history?item_name=&tier=&limit=100	История lowest_bin
-GET	/auction/stats?item_name=&tier=&days=7	Статистика продаж
-Пример:
+```
 
-bash
+### Auction
+
+| Метод | Путь | Описание |
+|---|---|---|
+| `GET` | `/auction/search?search=&limit=20` | Автокомплит по предметам |
+| `GET` | `/auction/history?item_name=&tier=&limit=100` | История `lowest_bin` |
+| `GET` | `/auction/stats?item_name=&tier=&days=7` | Статистика продаж |
+
+**Пример:**
+
+```bash
 curl "http://localhost:8000/auction/history?item_name=Hyperion&tier=LEGENDARY&limit=10"
 curl "http://localhost:8000/auction/stats?item_name=Hyperion&days=7"
-/auction/stats возвращает:
+```
 
-json
+`/auction/stats` возвращает:
+
+```json
 {
   "item_name": "Hyperion",
   "tier": "LEGENDARY",
@@ -172,15 +216,24 @@ json
   "sales_count": 42,
   "avg_listings": 3.5
 }
-Categories
-Метод	  Путь	      Описание
-GET	/categories/	Дерево main → subcategories
+```
 
-Метод	Путь	Описание
-GET	/health	Статус сервиса
-GET	/docs	Swagger UI
-GET	/redoc	ReDoc
-Структура проекта
+### Categories
+
+| Метод | Путь | Описание |
+|---|---|---|
+| `GET` | `/categories/` | Дерево `main → subcategories` |
+
+### Служебные
+
+| Метод | Путь | Описание |
+|---|---|---|
+| `GET` | `/health` | Статус сервиса |
+| `GET` | `/docs` | Swagger UI |
+| `GET` | `/redoc` | ReDoc |
+
+---
+
 ## Структура проекта
 
 ```text
@@ -233,94 +286,102 @@ Hupy/
 ├── pyproject.toml
 └── requirements.txt
 ```
-Как это работает:
-Bazaar
-worker каждые BAZAAR_FETCH_INTERVAL секунд дёргает /skyblock/bazaar.
 
-Для каждого product_id определяется категория:
+---
 
-PRODUCT_TO_CATEGORY (slugify + явные overrides + книги зачарований);
+## Как это работает
 
-MANUAL_CATEGORIES (ручной словарь);
+### Bazaar
 
-префиксные/суффиксные/подстрочные правила;
+1. `worker` каждые `BAZAAR_FETCH_INTERVAL` секунд дёргает `/skyblock/bazaar`.
+2. Для каждого `product_id` определяется категория:
+   - `PRODUCT_TO_CATEGORY` (slugify + явные overrides + книги зачарований);
+   - `MANUAL_CATEGORIES` (ручной словарь);
+   - префиксные/суффиксные/подстрочные правила;
+   - fallback → `("Unknown", "Uncategorized")`.
+3. `(main, sub) → sub_category_id` берётся из in-memory кэша,
+   который строится при старте воркера (`bootstrap.seed_and_cache`).
+4. `quick_status` сохраняется в `bazaar_prices` с `sub_category_id`.
 
-fallback → ("Unknown", "Uncategorized").
+### Auction
 
-(main, sub) → sub_category_id берётся из in-memory кэша,
-который строится при старте воркера (bootstrap.seed_and_cache).
+1. `worker` постранично тянет `/skyblock/auctions` (до `totalPages`),
+   между страницами — пауза `PAGE_DELAY=0.3s`.
+2. Из всех BIN-лотов считаются `min(starting_bid)` и `count` по
+   ключу `(item_name, tier)`. Имя нормализуется: `§-коды`, `[Lvl N]`,
+   символы `✪ ◆` — срезаются.
+3. Пишется одна запись в `auction_prices` (PK: `item_name, tier, timestamp`
+   с `date_trunc('minute', now())` — одна запись на минуту).
+4. Отдельная джоба тянет `/skyblock/auctions_ended` — это **факты продаж**.
+   `item_name` и `tier` извлекаются из base64-gzip-NBT `item_bytes`
+   (поле `display.Name`), редкость — по цвету (`§6` → LEGENDARY и т.д.).
+5. `auction_sales` — append-only, PK `auction_uuid` (idempotent через
+   `ON CONFLICT DO NOTHING`).
 
-quick_status сохраняется в bazaar_prices с sub_category_id.
+### Кэширование
 
-Auction
-worker постранично тянет /skyblock/auctions (до totalPages),
-между страницами — пауза PAGE_DELAY=0.3s.
+- `bazaar:search:*` — 30 сек
+- `bazaar:{pid}:*` — 30 сек
+- `auction:search:*` — 60 сек
+- `auction:history:*` — 60 сек
+- `auction:stats:*` — 60 сек
+- `categories:tree` — 3600 сек
 
-Из всех BIN-лотов считаются min(starting_bid) и count по
-ключу (item_name, tier). Имя нормализуется: §-коды, [Lvl N],
-символы ✪ ◆ — срезаются.
+Ключи строятся по **нормализованному** входу — `"Hyperion"` и
+`"hyperion "` дают один и тот же кэш.
 
-Пишется одна запись в auction_prices (PK: item_name, tier, timestamp
-с date_trunc('minute', now()) — одна запись на минуту).
+### Redis Lock
 
-Отдельная джоба тянет /skyblock/auctions_ended — это факты продаж.
-item_name и tier извлекаются из base64-gzip-NBT item_bytes
-(поле display.Name), редкость — по цвету (§6 → LEGENDARY и т.д.).
-
-auction_sales — append-only, PK auction_uuid (idempotent через
-ON CONFLICT DO NOTHING).
-
-Кэширование
-bazaar:search:* — 30 сек
-
-bazaar:{pid}:* — 30 сек
-
-auction:search:* — 60 сек
-
-auction:history:* — 60 сек
-
-auction:stats:* — 60 сек
-
-categories:tree — 3600 сек
-
-Ключи строятся по нормализованному входу — "Hyperion" и
-"hyperion " дают один и тот же кэш.
-
-Redis Lock
-Все три джобы обёрнуты в @with_redis_lock(name). Lock TTL = 900 сек,
-снятие — атомарно через Lua (GET + DEL только если наш token).
+Все три джобы обёрнуты в `@with_redis_lock(name)`. Lock TTL = 900 сек,
+снятие — атомарно через Lua (`GET` + `DEL` только если наш `token`).
 Это защищает от:
 
-параллельного запуска на двух worker-контейнерах;
+- параллельного запуска на двух worker-контейнерах;
+- повторного запуска после рестарта;
+- misfire от планировщика.
 
-повторного запуска после рестарта;
+---
 
-misfire от планировщика.
+## Разработка
 
-Разработка
-Pre-commit
-bash
+### Pre-commit
+
+```bash
 ruff check .
 ruff format .
 mypy .
-Обновление списка категорий
-Дерево категорий Bazaar лежит в models/seed_data.py. После правок:
+```
 
-bash
+### Обновление списка категорий
+
+Дерево категорий Bazaar лежит в `models/seed_data.py`. После правок:
+
+```bash
 # пересоздать категории в БД
 python -c "import asyncio; from core.bootstrap import seed_and_cache; asyncio.run(seed_and_cache())"
-Аудит неклассифицированных предметов
-bash
-python -m scripts.audit_unknown
-Покажет product_id, которые не попали ни в PRODUCT_TO_CATEGORY,
-ни в MANUAL_CATEGORIES, ни в паттерны. Их нужно добавить в
-models/product_id_manual.py.
+```
 
-Очистка кэша
-bash
+### Аудит неклассифицированных предметов
+
+```bash
+python -m scripts.audit_unknown
+```
+
+Покажет `product_id`, которые не попали ни в `PRODUCT_TO_CATEGORY`,
+ни в `MANUAL_CATEGORIES`, ни в паттерны. Их нужно добавить в
+`models/product_id_manual.py`.
+
+### Очистка кэша
+
+```bash
 docker compose exec redis redis-cli FLUSHDB
-Тестирование
-bash
+```
+
+---
+
+## Тестирование
+
+```bash
 # все тесты
 pytest
 
@@ -329,20 +390,23 @@ pytest tests/unit -v
 
 # с покрытием
 pytest --cov=core --cov=services --cov=repositories --cov-report=term-missing
+```
+
 Структура:
 
-tests/unit/ — нормализация, slugify, _tier_from_colored_name,
-expand_book_range, _get_with_retry (через httpx.MockTransport).
+- `tests/unit/` — нормализация, slugify, `_tier_from_colored_name`,
+  `expand_book_range`, `_get_with_retry` (через `httpx.MockTransport`).
+- `tests/services/` — `fetch_and_save` с фейковым клиентом и repo.
+- `tests/repositories/` — на реальном Postgres через `testcontainers`.
 
-tests/services/ — fetch_and_save с фейковым клиентом и repo.
+> ⚠️ `tests/repositories/` требует Docker. Если на CI он недоступен —
+> используйте маркер `@pytest.mark.repo` и запускайте `pytest -m "not repo"`.
 
-tests/repositories/ — на реальном Postgres через testcontainers.
+---
 
-⚠️ tests/repositories/ требует Docker. Если на CI он недоступен —
-используйте маркер @pytest.mark.repo и запускайте pytest -m "not repo".
+## Миграции
 
-Миграции
-bash
+```bash
 # применить все
 alembic upgrade head
 
@@ -351,47 +415,52 @@ alembic downgrade -1
 
 # новая миграция (autogenerate)
 alembic revision --autogenerate -m "add new column"
-Миграции async — alembic/env.py использует async_engine_from_config.
-URL берётся из settings.database_url (не из alembic.ini).
+```
 
-Известные ограничения
-auctions_ended и рейтинг. Hypixel не отдаёт tier в
-/skyblock/auctions_ended, поэтому редкость вытаскивается из
-display.Name NBT через §-коды. Для некоторых предметов
-(например, кастомные ✪-звёзды в имени) tier может быть None.
-В БД auction_sales.tier — nullable.
+Миграции **async** — `alembic/env.py` использует `async_engine_from_config`.
+URL берётся из `settings.database_url` (не из `alembic.ini`).
 
-auction_prices.tier — NOT NULL DEFAULT '' (не NULL), чтобы
-PK (item_name, tier, timestamp) не ломался. В available_tiers
-пустая строка должна фильтроваться (см. get_stats), иначе
-фронт увидит мусорный тир.
+---
 
-auction_sales — append-only. Дедупликация через
-ON CONFLICT (auction_uuid) DO NOTHING; при повторной синхронизации
-старые записи не перезаписываются.
+## Известные ограничения
 
-/bazaar/{product_id}/history возвращает историю по
-product_id в том виде, в котором он лежит в БД. Входной параметр
-нормализуется через normalize_product_id, но хранимые значения —
-как их отдаёт Hypixel (UPPER_SNAKE_CASE).
+- **`auctions_ended` и рейтинг.** Hypixel не отдаёт `tier` в
+  `/skyblock/auctions_ended`, поэтому редкость вытаскивается из
+  `display.Name` NBT через `§`-коды. Для некоторых предметов
+  (например, кастомные `✪`-звёзды в имени) `tier` может быть `None`.
+  В БД `auction_sales.tier` — `nullable`.
+- **`auction_prices.tier`** — `NOT NULL DEFAULT ''` (не `NULL`), чтобы
+  PK `(item_name, tier, timestamp)` не ломался. В `available_tiers`
+  пустая строка **должна** фильтроваться (см. `get_stats`), иначе
+  фронт увидит мусорный тир.
+- **`auction_sales` — append-only.** Дедупликация через
+  `ON CONFLICT (auction_uuid) DO NOTHING`; при повторной синхронизации
+  старые записи не перезаписываются.
+- **`/bazaar/{product_id}/history`** возвращает историю по
+  `product_id` в том виде, в котором он лежит в БД. Входной параметр
+  нормализуется через `normalize_product_id`, но хранимые значения —
+  как их отдаёт Hypixel (UPPER_SNAKE_CASE).
+- **`/auction/history` и `/auction/stats`** сейчас ищут `item_name`
+  в БД с сохранённым регистром (`WHERE item_name = 'Hyperion'`).
+  Входной `"HYPERION"` вернёт пустой результат. Если нужно
+  регистронезависимое сравнение — используйте `func.lower(...)`.
+- **Redis Lock TTL (900 сек) > интервала джоб (120–300 сек).** Если
+  воркер упадёт между `SET NX` и `DEL`, lock будет висеть 15 минут —
+  итерации пропустятся. Это осознанный компромисс в пользу
+  безопасности от параллельных запусков.
 
-/auction/history и /auction/stats сейчас ищут item_name
-в БД с сохранённым регистром (WHERE item_name = 'Hyperion').
-Входной "HYPERION" вернёт пустой результат. Если нужно
-регистронезависимое сравнение — используйте func.lower(...).
+---
 
-Redis Lock TTL (900 сек) > интервала джоб (120–300 сек). Если
-воркер упадёт между SET NX и DEL, lock будет висеть 15 минут —
-итерации пропустятся. Это осознанный компромисс в пользу
-безопасности от параллельных запусков.
+## Лицензия
 
-Лицензия
-MIT 
+MIT — см. файл [`LICENSE`](LICENSE).
 
-Благодарности
-Hypixel API — источник данных.
+---
 
-FastAPI,
-SQLAlchemy,
-APScheduler,
-nbtlib — стек проекта.
+## Благодарности
+
+- [Hypixel API](https://api.hypixel.net/) — источник данных.
+- [FastAPI](https://fastapi.tiangolo.com/),
+  [SQLAlchemy](https://www.sqlalchemy.org/),
+  [APScheduler](https://apscheduler.readthedocs.io/),
+  [nbtlib](https://github.com/vberlier/nbtlib) — стек проекта.
