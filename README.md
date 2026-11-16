@@ -182,7 +182,9 @@ GET	/health	Статус сервиса
 GET	/docs	Swagger UI
 GET	/redoc	ReDoc
 Структура проекта
-text
+## Структура проекта
+
+```text
 Hupy/
 ├── api/
 │   ├── dependencies.py          # DI: repo-фабрики
@@ -231,7 +233,7 @@ Hupy/
 ├── alembic.ini
 ├── pyproject.toml
 └── requirements.txt
-
+```
 Как это работает:
 Bazaar
 worker каждые BAZAAR_FETCH_INTERVAL секунд дёргает /skyblock/bazaar.
