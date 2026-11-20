@@ -3,12 +3,12 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from core.config import settings
-from core.database import engine
-from core.redis_client import redis_pool
+from app.core.config import settings
+from app.core.database import engine
+from app.core.redis_client import redis_pool
 
 
-from api.routes import bazaar, auction, categories
+from app.api.routes import bazaar, auction
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -36,8 +36,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 app.include_router(bazaar.router)
-app.include_router(auction.router)
-app.include_router(categories.router)   
+app.include_router(auction.router) 
 
 app.add_middleware(
     CORSMiddleware,
@@ -54,7 +53,10 @@ def read_root():
         "docs": "/docs",
     }
 
-
 # http://localhost:8000/docs
 
 # docker compose up --build app worker
+
+#  1) В базар было дабалено количество ордеров и обьем торговли предмета за неделю
+# 2) создание общей папки app
+# 3) Удаление категорий

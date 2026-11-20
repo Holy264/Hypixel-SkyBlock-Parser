@@ -8,25 +8,22 @@ import signal
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from core.config import settings
-from core.database import engine
-from core.bootstrap import seed_and_cache
-from core.hypixel_client import HypixelClient
-from core.scheduler import setup_scheduler_jobs
-from core.redis_client import redis_pool
+from app.core.config import settings
+from app.core.database import engine
+from app.core.hypixel_client import HypixelClient
+from app.core.scheduler import setup_scheduler_jobs
+from app.core.redis_client import redis_pool
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
+
 for noisy in ("httpx", "httpcore", "apscheduler", "sqlalchemy.engine"):
     logging.getLogger(noisy).setLevel(logging.WARNING)
     
 log = logging.getLogger("worker")
 
 async def main() -> None:
-
-    await seed_and_cache()
-    
   
     client = HypixelClient(settings.hypixel_api_key.get_secret_value())
 
